@@ -223,6 +223,19 @@ func CallActor(ctx context.Context, actor Actor, path, payload, flow string, par
 	if err != nil {
 		return nil, err
 	} else {
+		if config.IsDebugMode || isDebuggerPresent {
+			busyInfoLock.RLock()
+			myActor := busyInfo.ActorHandling[parentID]
+			busyInfoLock.RUnlock()
+
+			doBreakpointStuff(breakpointAttrs_t {
+				actorId: actor.ID,
+				actorType: actor.Type,
+				path: path,
+				isRequest: "request",
+				isCallee: "caller",
+			}, actorTuple_t {actorType: myActor.ActorType, actorId: myActor.ActorId }, parentID, bytes, false, []byte{})
+		}
 		//bytes, err = rpc.Call(ctx, rpc.Destination{Target: rpc.Session{Name: actor.Type, ID: actor.ID, Flow: flow}, Method: actorEndpoint}, defaultTimeout(), parentID, bytes)
 
 		// very ugly! reimplement rpc.Call in order to get the request id
@@ -252,6 +265,8 @@ func CallActor(ctx context.Context, actor Actor, path, payload, flow string, par
 			defer deleteSent()
 		}
 
+		reqBytes := bytes
+
 		var bytes []byte
 		select {
 		case result := <-ch:
@@ -266,6 +281,21 @@ func CallActor(ctx context.Context, actor Actor, path, payload, flow string, par
 		}
 		var reply Reply
 		err = json.Unmarshal(bytes, &reply)
+
+		if config.IsDebugMode || isDebuggerPresent {
+			busyInfoLock.RLock()
+			myActor := busyInfo.ActorHandling[parentID]
+			busyInfoLock.RUnlock()
+
+			doBreakpointStuff(breakpointAttrs_t {
+				actorId: actor.ID,
+				actorType: actor.Type,
+				path: path,
+				isRequest: "response",
+				isCallee: "caller",
+			}, actorTuple_t {actorType: myActor.ActorType, actorId: myActor.ActorId }, parentID, reqBytes, true, bytes)
+		}
+
 		return &reply, err
 	}
 }
@@ -353,6 +383,20 @@ func TellActor(ctx context.Context, actor Actor, path, payload string, parentID 
 	if err != nil {
 		return err
 	} else {
+		if config.IsDebugMode || isDebuggerPresent {
+			busyInfoLock.RLock()
+			myActor := busyInfo.ActorHandling[parentID]
+			busyInfoLock.RUnlock()
+
+			doBreakpointStuff(breakpointAttrs_t {
+				actorId: actor.ID,
+				actorType: actor.Type,
+				path: path,
+				isRequest: "request",
+				isCallee: "caller",
+			}, actorTuple_t {actorType: myActor.ActorType, actorId: myActor.ActorId }, parentID, bytes, false, []byte{})
+		}
+
 		return rpc.Tell(ctx, rpc.Destination{Target: rpc.Session{Name: actor.Type, ID: actor.ID, Flow: newFlowId()}, Method: actorEndpoint}, defaultTimeout(), parentID, bytes)
 	}
 }
@@ -1339,6 +1383,48 @@ func notifyBreakpoint(msg map[string]string) {
 	//fmt.Println("notifying breakpoint")
 	myBytes, _ := json.Marshal(msg)
 	sendAll(myBytes, "")
+}
+
+func doBreakpointStuff(attrs breakpointAttrs_t, myActor actorTuple_t, requestId string, value []byte, isResponse bool, respVal []byte) {
+	if !(config.IsDebugMode || isDebuggerPresent) { return }
+	emptyActor := actorTuple_t{}
+	if myActor == emptyActor { return }
+
+
+	isBreak, bk := checkBreakpoint(attrs)
+
+	if isBreak {
+		// TODO: also add a "callee" argument to informBreakpoint
+		informBreakpoint(myActor, requestId, bk, string(value), "", "request")
+		switch bk.breakpointType {
+		case "actor":
+			pause(myActor, bk)
+		case "node":
+			pauseNode(bk)
+		case "global":
+			pauseNode(bk)
+			pauseAllSidecars(bk)
+		case "suicide":
+			cancel9()
+			for true {}
+		}
+	}
+
+	isNodePausedLock.Lock()
+	_, ok := immuneFromNodePaused[myActor]
+	if isNodePaused && !ok {
+		pause(myActor, nodePausedBk)
+	}
+	isNodePausedLock.Unlock()
+
+	// if we're paused, then wait
+	waitOnPause(myActor,
+		requestId,
+		string(value),
+		string(respVal),
+		isResponse,
+		!isBreak, //only send a pause if we didn't hit the breakpoint
+	)
 }
 
 // activate an actor
