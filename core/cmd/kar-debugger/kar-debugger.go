@@ -404,6 +404,7 @@ type breakpoint_t struct {
 	Path string `json:"path"`
 
 	IsRequest string `json:"isRequest"`
+	IsCallee string `json:"isCallee"`
 
 	Nodes map[string]struct{}
 	NodesList []string `json:"nodes"`
@@ -498,6 +499,7 @@ func printBreakpoint(b breakpoint_t) {
 		fmt.Printf("\t* Break on method: %v\n", b.Path)
 	}
 	fmt.Printf("\t* Break on request vs. response: %v\n", b.IsRequest)
+	fmt.Printf("\t* Break on caller vs. callee: %v\n", b.IsCallee)
 
 	fmt.Printf("\t* Breakpoint present on nodes:\n")
 	for node, _ := range b.Nodes {
@@ -666,6 +668,7 @@ func listenSidecar(){
 					BreakpointId: id,
 					BreakpointType: msg["breakpointType"],
 					IsRequest: msg["isRequest"],
+					IsCallee: msg["isCallee"],
 					Nodes: map[string]struct{}{},
 				}
 				if msg["deleteOnHit"] == "true" {
@@ -1362,7 +1365,9 @@ func processClient() {
 				"-location": "isRequest",
 				"-actorId": "",
 				"-type": "breakpointType",
-			}, map[string]string{},
+			}, map[string]string{
+				"-caller": "",
+			},
 			2,
 		)
 		_, pathOk := msg["path"];
@@ -1375,6 +1380,14 @@ func processClient() {
 		}
 		msg["path"] = "/"+msg["path"]
 		msg["command"] = "setBreakpoint"
+
+		_, callerOk := msg["caller"]
+		if callerOk {
+			msg["isCallee"] = "caller"
+		} else {
+			msg["isCallee"] = "callee"
+		}
+		delete(msg, "caller")
 
 		msgBytes, _ := json.Marshal(msg)
 		err = sendDebugger(clientConn, msgBytes)

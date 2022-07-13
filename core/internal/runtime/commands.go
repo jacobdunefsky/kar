@@ -49,6 +49,10 @@ type breakpointAttrs_t struct {
 	// "request": trigger breakpoint upon method request
 	// "response": trigger breakpoint upon method response
 	isRequest string
+
+	// "caller": triger breakpoint in caller
+	// "callee": trigger breakpoint in actor being called (default)
+	isCallee string
 }
 
 type breakpoint_t struct {
@@ -555,6 +559,7 @@ func handlerActor(ctx context.Context, target rpc.Session, instance *rpc.Session
 			actorType: bkActorType,
 			path: bkPath,
 			isRequest: "request",
+			isCallee: "callee",
 		})
 
 		myActor := actorTuple_t { actorId: target.ID, actorType: target.Name }
@@ -746,6 +751,7 @@ func handlerActor(ctx context.Context, target rpc.Session, instance *rpc.Session
 			actorType: bkActorType,
 			path: bkPath,
 			isRequest: "response",
+			isCallee: "callee",
 		})
 
 		/* isBreak, bk = checkBreakpoint(breakpointAttrs_t {
@@ -917,7 +923,7 @@ func setBreakpoint(ctx context.Context, msg map[string]string) ([]byte, error) {
 		actorId: msg["actorId"],
 		actorType: msg["actorType"],
 		path: msg["path"],
-		//isCaller: msg["isCaller"],
+		isCallee: msg["isCallee"],
 		isRequest: msg["isRequest"],
 	}
 
@@ -1285,6 +1291,7 @@ func listBreakpoints() ([]byte, error) {
 		breakpointsMap[id]["actorType"] = breakpoint.attrs.actorType
 		breakpointsMap[id]["path"] = breakpoint.attrs.path
 		breakpointsMap[id]["isRequest"] = breakpoint.attrs.isRequest
+		breakpointsMap[id]["isCallee"] = breakpoint.attrs.isCallee
 	}
 
 	breakpointsBytes, err := json.Marshal(breakpointsMap)

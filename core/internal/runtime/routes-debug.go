@@ -74,6 +74,7 @@ type listBreakpointInfo_t struct {
 	Path string `json:"path"`
 
 	IsRequest string `json:"isRequest"`
+	IsCallee string `json:"isCallee"`
 
 	Nodes []string `json:"nodes"`
 }
@@ -693,7 +694,7 @@ func implSetBreakpoint(bodyJson map[string]string) ([]byte, error) {
 		"actorId": mapget(bodyJson, "actorId", ""),
 		"actorType": actorType,
 		"path": path,
-		"isCaller": mapget(bodyJson, "isCaller", "caller"),
+		"isCallee": mapget(bodyJson, "isCallee", "callee"),
 		"isRequest": mapget(bodyJson, "isRequest", "request"),
 		"srcNodeId": rpc.GetNodeID(),
 		"deleteOnHit": bodyJson["deleteOnHit"],
